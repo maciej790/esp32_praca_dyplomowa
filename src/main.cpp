@@ -50,5 +50,5 @@ void loop()
     Serial.println("Błąd wysyłania danych do serwera!");
   }
 
-  delay(3000);
+  delay(1000);
 }
