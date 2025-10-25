@@ -15,7 +15,7 @@ const char *password = "001dd2894ed2";
 Bme280 bme280;
 GroveMP503 groveMp503;
 Lcd lcd;
-HttpSender sender("http://ptsv3.com/stacjaPogodowa");
+HttpSender sender("http://192.168.0.4:3000/dashboard/sensor_data");
 
 void setup()
 {
