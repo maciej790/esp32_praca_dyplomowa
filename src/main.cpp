@@ -15,6 +15,7 @@ const char *password = "001dd2894ed2";
 Bme280 bme280;
 GroveMP503 groveMp503;
 Lcd lcd;
+// zmieniono adres IP na lokalny adres serwera
 HttpSender sender("http://192.168.0.4:3000/dashboard/sensor_data");
 
 void setup()
@@ -45,7 +46,12 @@ void loop()
 
   lcd.displayData(envData.temperature, envData.humidity, envData.pressure, String(airData.quality.c_str()));
 
-  if (!sender.sendData(envData.temperature, envData.humidity, envData.pressure, String(airData.quality.c_str())))
+  if (sender.sendData(envData.temperature, envData.humidity, envData.pressure, String(airData.quality.c_str())))
+  {
+    pinMode(2, OUTPUT);
+    digitalWrite(2, HIGH);
+  }
+  else if (!sender.sendData(envData.temperature, envData.humidity, envData.pressure, String(airData.quality.c_str())))
   {
     Serial.println("Błąd wysyłania danych do serwera!");
   }
