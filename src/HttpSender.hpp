@@ -38,7 +38,7 @@ public:
         }
     }
 
-    bool sendData(float temperature, float humidity, float pressure, const String &airQuality)
+    bool sendData(float temperature, float humidity, float pressure, float voltage, const String &airQuality)
     {
         if (WiFi.status() != WL_CONNECTED)
         {
@@ -54,6 +54,7 @@ public:
         jsonPayload += "\"temperature\": " + String(temperature, 2) + ",";
         jsonPayload += "\"humidity\": " + String(humidity, 2) + ",";
         jsonPayload += "\"pressure\": " + String(pressure, 2) + ",";
+        jsonPayload += "\"voltage\": " + String(voltage, 2) + ",";
         jsonPayload += "\"airQuality\": \"" + airQuality + "\"";
         jsonPayload += "}";
 
