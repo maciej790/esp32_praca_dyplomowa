@@ -12,11 +12,12 @@ const int SIGNAL_PIN = 35;
 const char *ssid = "vnet-894ED2";
 const char *password = "001dd2894ed2";
 
+// zmieniono adres IP na lokalny adres serwera
+HttpSender sender("http://192.168.0.7:3000/dashboard/sensor_data");
+
 Bme280 bme280;
 GroveMP503 groveMp503;
 Lcd lcd;
-// zmieniono adres IP na lokalny adres serwera
-HttpSender sender("http://192.168.0.7:3000/dashboard/sensor_data");
 
 void setup()
 {
@@ -27,13 +28,17 @@ void setup()
   groveMp503.begin(SIGNAL_PIN);
   lcd.begin();
   sender.begin(ssid, password);
+
+  pinMode(2, OUTPUT); // LED status
 }
 
 void loop()
 {
+  // Odczyt czujników
   Bme280Data envData = bme280.readValues();
   GroveMP503Data airData = groveMp503.readAirQuality();
 
+  // Wyświetlenie w konsoli
   Serial.print("Temperatura: ");
   Serial.println(envData.temperature);
   Serial.print("Ciśnienie: ");
@@ -46,24 +51,29 @@ void loop()
   Serial.println(airData.quality.c_str());
   Serial.println("------------------------");
 
+  // Wyświetlenie na LCD
   lcd.displayData(envData.temperature, envData.humidity, envData.pressure, String(airData.quality.c_str()));
 
-  bool success = sender.sendData(
-      envData.temperature,
-      envData.humidity,
-      envData.pressure,
-      airData.voltage,
-      String(airData.quality.c_str()));
+  // Przygotowanie próbki
+  SensorSample sample;
+  sample.temperature = envData.temperature;
+  sample.humidity = envData.humidity;
+  sample.pressure = envData.pressure;
+  sample.voltage = airData.voltage;
+  sample.airQuality = String(airData.quality.c_str());
 
-  if (success)
+  // Dodanie próbki do bufora i ewentualna wysyłka
+  sender.addSample(sample, ssid, password);
+
+  // Status LED: świeci gdy WiFi połączone
+  if (WiFi.status() == WL_CONNECTED)
   {
-    pinMode(2, OUTPUT);
     digitalWrite(2, HIGH);
   }
   else
   {
-    Serial.println("Błąd wysyłania danych do serwera!");
+    digitalWrite(2, LOW);
   }
 
-  delay(1000);
+  delay(500); // np. co 0.5s dodajemy próbkę
 }
