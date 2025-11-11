@@ -5,19 +5,26 @@
 #include "Lcd.hpp"
 #include "HttpSender.hpp"
 
+// 🧩 Piny I2C i czujników
 const int SDA_PIN = 21;
 const int SCL_PIN = 22;
 const int SIGNAL_PIN = 35;
 
+// 🌐 WiFi
 const char *ssid = "vnet-894ED2";
 const char *password = "001dd2894ed2";
 
-// zmieniono adres IP na lokalny adres serwera
+// 🌍 Adres lokalnego serwera
 HttpSender sender("http://192.168.0.7:3000/dashboard/sensor_data");
 
+// 🧠 Czujniki i LCD
 Bme280 bme280;
 GroveMP503 groveMp503;
 Lcd lcd;
+
+// ⏱️ Zmienne czasowe
+unsigned long lastSampleTime = 0;
+const unsigned long SAMPLE_INTERVAL = 500; // co 0.5 s próbka
 
 void setup()
 {
@@ -27,53 +34,44 @@ void setup()
   bme280.begin(SDA_PIN, SCL_PIN);
   groveMp503.begin(SIGNAL_PIN);
   lcd.begin();
+
+  pinMode(2, OUTPUT); // LED status WiFi
+
   sender.begin(ssid, password);
 
-  pinMode(2, OUTPUT); // LED status
+  Serial.println("✅ Setup zakończony. Start pomiarów...");
 }
 
 void loop()
 {
-  // Odczyt czujników
-  Bme280Data envData = bme280.readValues();
-  GroveMP503Data airData = groveMp503.readAirQuality();
+  unsigned long now = millis();
 
-  // Wyświetlenie w konsoli
-  Serial.print("Temperatura: ");
-  Serial.println(envData.temperature);
-  Serial.print("Ciśnienie: ");
-  Serial.println(envData.pressure);
-  Serial.print("Wilgotność: ");
-  Serial.println(envData.humidity);
-  Serial.print("Napięcie: ");
-  Serial.println(airData.voltage);
-  Serial.print("Jakość powietrza: ");
-  Serial.println(airData.quality.c_str());
-  Serial.println("------------------------");
-
-  // Wyświetlenie na LCD
-  lcd.displayData(envData.temperature, envData.humidity, envData.pressure, String(airData.quality.c_str()));
-
-  // Przygotowanie próbki
-  SensorSample sample;
-  sample.temperature = envData.temperature;
-  sample.humidity = envData.humidity;
-  sample.pressure = envData.pressure;
-  sample.voltage = airData.voltage;
-  sample.airQuality = String(airData.quality.c_str());
-
-  // Dodanie próbki do bufora i ewentualna wysyłka
-  sender.addSample(sample, ssid, password);
-
-  // Status LED: świeci gdy WiFi połączone
-  if (WiFi.status() == WL_CONNECTED)
+  // 🔹 Zbieranie próbek co 0.5 s
+  if (now - lastSampleTime >= SAMPLE_INTERVAL)
   {
-    digitalWrite(2, HIGH);
-  }
-  else
-  {
-    digitalWrite(2, LOW);
+    lastSampleTime = now;
+
+    Bme280Data envData = bme280.readValues();
+    GroveMP503Data airData = groveMp503.readAirQuality();
+
+    SensorSample sample;
+    sample.temperature = envData.temperature;
+    sample.humidity = envData.humidity;
+    sample.pressure = envData.pressure;
+    sample.voltage = airData.voltage;
+    sample.airQuality = String(airData.quality.c_str());
+
+    sender.addSample(sample); // dodanie próbki do bufora
+
+    lcd.displayData(envData.temperature, envData.humidity, envData.pressure, sample.airQuality);
+
+    Serial.printf("Temp: %.2f°C | Hum: %.2f%% | Press: %.2f hPa | Air: %s\n",
+                  envData.temperature, envData.humidity, envData.pressure, sample.airQuality.c_str());
   }
 
-  delay(500); // np. co 0.5s dodajemy próbkę
+  // 🔹 Wysyłka faktyczna co 10 s
+  sender.update(ssid, password);
+
+  // 🔹 Dioda statusu WiFi
+  digitalWrite(2, WiFi.status() == WL_CONNECTED ? HIGH : LOW);
 }

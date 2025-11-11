@@ -19,6 +19,8 @@ private:
     SensorSample buffer[20]; // bufor do 20 próbek
     int bufferIndex = 0;
     const int maxRetries = 3;
+    unsigned long lastSendTime = 0;
+    const unsigned long SEND_INTERVAL = 5000; // wysyłka co 10 sekund
 
 public:
     HttpSender(const String &url) : serverUrl(url) {}
@@ -48,7 +50,6 @@ public:
         }
     }
 
-    // Sprawdza WiFi i ewentualnie ponownie łączy
     void ensureWiFiConnected(const char *ssid, const char *password)
     {
         if (WiFi.status() != WL_CONNECTED)
@@ -76,33 +77,38 @@ public:
         }
     }
 
-    // Dodaj próbkę do bufora i wyślij jeśli bufor pełny
-    void addSample(SensorSample sample, const char *ssid, const char *password)
+    // Dodaj próbkę do bufora
+    void addSample(SensorSample sample)
     {
-        buffer[bufferIndex++] = sample;
-
-        if (bufferIndex >= 20)
+        if (bufferIndex < 20)
         {
-            sendBufferedData(ssid, password);
-            bufferIndex = 0;
+            buffer[bufferIndex++] = sample;
+        }
+        else
+        {
+            // circular buffer – nadpisujemy najstarszą próbkę
+            for (int i = 1; i < 20; i++)
+                buffer[i - 1] = buffer[i];
+            buffer[19] = sample;
         }
     }
 
-    // Wyślij wszystkie próbki z bufora
-    void sendBufferedData(const char *ssid, const char *password)
+    // Wywołanie w loop() – wysyłka jednej próbki co SEND_INTERVAL
+    void update(const char *ssid, const char *password)
     {
-        ensureWiFiConnected(ssid, password);
-
-        for (int i = 0; i < bufferIndex; i++)
+        unsigned long now = millis();
+        if (now - lastSendTime >= SEND_INTERVAL && bufferIndex > 0)
         {
-            sendDataWithRetry(buffer[i]);
+            sendDataWithRetry(buffer[bufferIndex - 1], ssid, password); // wysyłamy ostatnią próbkę
+            lastSendTime = now;
         }
     }
 
 private:
-    // Wysyłka HTTP z retry
-    bool sendDataWithRetry(SensorSample sample)
+    bool sendDataWithRetry(SensorSample sample, const char *ssid, const char *password)
     {
+        ensureWiFiConnected(ssid, password);
+
         for (int attempt = 0; attempt < maxRetries; attempt++)
         {
             if (sendData(sample))
@@ -114,7 +120,6 @@ private:
         return false;
     }
 
-    // Wysyłka jednej próbki
     bool sendData(SensorSample sample)
     {
         if (WiFi.status() != WL_CONNECTED)
@@ -135,23 +140,20 @@ private:
         jsonPayload += "\"airQuality\": \"" + sample.airQuality + "\"";
         jsonPayload += "}";
 
-        Serial.println("Wysyłam JSON:");
+        Serial.println("📤 Wysyłam JSON:");
         Serial.println(jsonPayload);
 
-        int httpResponseCode = http.POST(jsonPayload);
+        int code = http.POST(jsonPayload);
 
-        if (httpResponseCode > 0)
+        if (code > 0 && code < 400)
         {
-            Serial.print("Dane wysłane, HTTP code: ");
-            Serial.println(httpResponseCode);
-            Serial.println("Odpowiedź serwera: " + http.getString());
+            Serial.printf("✅ Wysłano OK (HTTP %d)\n", code);
             http.end();
             return true;
         }
         else
         {
-            Serial.print("Błąd wysyłania: ");
-            Serial.println(httpResponseCode);
+            Serial.printf("❌ Błąd wysyłania (HTTP %d)\n", code);
             http.end();
             return false;
         }
