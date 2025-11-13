@@ -20,7 +20,7 @@ private:
     int bufferIndex = 0;
     const int maxRetries = 3;
     unsigned long lastSendTime = 0;
-    const unsigned long SEND_INTERVAL = 5000; // wysyłka co 10 sekund
+    const unsigned long SEND_INTERVAL = 5000; // wysyłka co 5 sekund
 
 public:
     HttpSender(const String &url) : serverUrl(url) {}
@@ -67,17 +67,12 @@ public:
             }
 
             if (WiFi.status() == WL_CONNECTED)
-            {
                 Serial.println("\nPołączono ponownie z WiFi!");
-            }
             else
-            {
                 Serial.println("\nNie udało się ponownie połączyć z WiFi.");
-            }
         }
     }
 
-    // Dodaj próbkę do bufora
     void addSample(SensorSample sample)
     {
         if (bufferIndex < 20)
@@ -93,25 +88,30 @@ public:
         }
     }
 
-    // Wywołanie w loop() – wysyłka jednej próbki co SEND_INTERVAL
+    // Wywołanie w loop() – wysyłka ostatniej próbki co SEND_INTERVAL
     void update(const char *ssid, const char *password)
     {
         unsigned long now = millis();
         if (now - lastSendTime >= SEND_INTERVAL && bufferIndex > 0)
         {
-            sendDataWithRetry(buffer[bufferIndex - 1], ssid, password); // wysyłamy ostatnią próbkę
+            // wysyłka do pierwszego endpointu
+            sendDataWithRetry(buffer[bufferIndex - 1], ssid, password, serverUrl);
+
+            // wysyłka do drugiego endpointu (drugi URL możesz zmienić)
+            sendDataWithRetry(buffer[bufferIndex - 1], ssid, password, "http://192.168.0.7:3000/sensor_data/store_data");
+
             lastSendTime = now;
         }
     }
 
 private:
-    bool sendDataWithRetry(SensorSample sample, const char *ssid, const char *password)
+    bool sendDataWithRetry(SensorSample sample, const char *ssid, const char *password, String url)
     {
         ensureWiFiConnected(ssid, password);
 
         for (int attempt = 0; attempt < maxRetries; attempt++)
         {
-            if (sendData(sample))
+            if (sendData(sample, url))
                 return true;
             Serial.println("Próba ponownego wysłania...");
             delay(1000);
@@ -120,7 +120,7 @@ private:
         return false;
     }
 
-    bool sendData(SensorSample sample)
+    bool sendData(SensorSample sample, String url)
     {
         if (WiFi.status() != WL_CONNECTED)
         {
@@ -129,7 +129,7 @@ private:
         }
 
         HTTPClient http;
-        http.begin(serverUrl);
+        http.begin(url);
         http.addHeader("Content-Type", "application/json");
 
         String jsonPayload = "{";
@@ -140,21 +140,20 @@ private:
         jsonPayload += "\"airQuality\": \"" + sample.airQuality + "\"";
         jsonPayload += "}";
 
-        Serial.println("📤 Wysyłam JSON:");
+        Serial.println("📤 Wysyłam JSON do " + url + ":");
         Serial.println(jsonPayload);
 
         int code = http.POST(jsonPayload);
+        http.end();
 
         if (code > 0 && code < 400)
         {
-            Serial.printf("✅ Wysłano OK (HTTP %d)\n", code);
-            http.end();
+            Serial.printf("✅ Wysłano OK do %s (HTTP %d)\n", url.c_str(), code);
             return true;
         }
         else
         {
-            Serial.printf("❌ Błąd wysyłania (HTTP %d)\n", code);
-            http.end();
+            Serial.printf("❌ Błąd wysyłania do %s (HTTP %d)\n", url.c_str(), code);
             return false;
         }
     }

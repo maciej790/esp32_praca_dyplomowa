@@ -15,7 +15,7 @@ const char *ssid = "vnet-894ED2";
 const char *password = "001dd2894ed2";
 
 // 🌍 Adres lokalnego serwera
-HttpSender sender("http://192.168.0.7:3000/dashboard/sensor_data");
+HttpSender sender("http://192.168.0.7:3000/sensor_data");
 
 // 🧠 Czujniki i LCD
 Bme280 bme280;
@@ -69,7 +69,7 @@ void loop()
                   envData.temperature, envData.humidity, envData.pressure, sample.airQuality.c_str());
   }
 
-  // 🔹 Wysyłka faktyczna co 10 s
+  // 🔹 Wysyłka faktyczna co 5 s na oba endpointy
   sender.update(ssid, password);
 
   // 🔹 Dioda statusu WiFi
