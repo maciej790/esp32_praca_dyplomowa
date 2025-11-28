@@ -4,15 +4,12 @@
 #include "GroveMP503.hpp"
 #include "Lcd.hpp"
 #include "HttpSender.hpp"
+#include "connection.h"
 
 // 🧩 Piny I2C i czujników
 const int SDA_PIN = 21;
 const int SCL_PIN = 22;
 const int SIGNAL_PIN = 35;
-
-// 🌐 WiFi
-const char *ssid = "vnet-894ED2";
-const char *password = "001dd2894ed2";
 
 // 🌍 Adres lokalnego serwera
 HttpSender sender("http://192.168.0.7:3000/sensor_data");
@@ -31,13 +28,30 @@ void setup()
   Serial.begin(9600);
   delay(500);
 
+  // 🌐 WiFi w trybie STA (klient)
+  Serial.println("Uruchamianie WiFi w trybie STA...");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  Serial.println("Łączenie z siecią WiFi...");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nPołączono z WiFi!");
+  Serial.print("Adres ESP32 (STA): ");
+  Serial.println(WiFi.localIP());
+
+  // 📟 Inicjalizacja sensorów i LCD
   bme280.begin(SDA_PIN, SCL_PIN);
   groveMp503.begin(SIGNAL_PIN);
   lcd.begin();
 
   pinMode(2, OUTPUT); // LED status WiFi
 
-  sender.begin(ssid, password);
+  sender.begin(WIFI_SSID, WIFI_PASS);
 
   Serial.println("✅ Setup zakończony. Start pomiarów...");
 }
@@ -69,9 +83,9 @@ void loop()
                   envData.temperature, envData.humidity, envData.pressure, sample.airQuality.c_str());
   }
 
-  // 🔹 Wysyłka faktyczna co 5 s na oba endpointy
-  sender.update(ssid, password);
+  // 🔹 Wysyłka faktyczna co 5 s (w klasie HttpSender)
+  sender.update(WIFI_SSID, WIFI_PASS);
 
-  // 🔹 Dioda statusu WiFi
+  // 🔹 Dioda statusu WiFi (STA)
   digitalWrite(2, WiFi.status() == WL_CONNECTED ? HIGH : LOW);
 }
