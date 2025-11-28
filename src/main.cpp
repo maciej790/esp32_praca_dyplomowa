@@ -1,17 +1,18 @@
 #include <Arduino.h>
 #include <WiFi.h>
+
 #include "Bme280.hpp"
 #include "GroveMP503.hpp"
 #include "Lcd.hpp"
 #include "HttpSender.hpp"
-#include "connection.h"
+#include "connection.h" // definiuje WIFI_SSID i WIFI_PASS
 
 // 🧩 Piny I2C i czujników
 const int SDA_PIN = 21;
 const int SCL_PIN = 22;
 const int SIGNAL_PIN = 35;
 
-// 🌍 Adres lokalnego serwera
+// 🌍 Obiekt HttpSender
 HttpSender sender("http://192.168.0.7:3000/sensor_data");
 
 // 🧠 Czujniki i LCD
@@ -21,14 +22,14 @@ Lcd lcd;
 
 // ⏱️ Zmienne czasowe
 unsigned long lastSampleTime = 0;
-const unsigned long SAMPLE_INTERVAL = 500; // co 0.5 s próbka
+const unsigned long SAMPLE_INTERVAL = 500; // co 0,5 s próbka
 
 void setup()
 {
   Serial.begin(9600);
   delay(500);
 
-  // 🌐 WiFi w trybie STA (klient)
+  // 🌐 WiFi w trybie STA
   Serial.println("Uruchamianie WiFi w trybie STA...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -44,14 +45,14 @@ void setup()
   Serial.print("Adres ESP32 (STA): ");
   Serial.println(WiFi.localIP());
 
-  // 📟 Inicjalizacja sensorów i LCD
+  // 📟 Inicjalizacja czujników i LCD
   bme280.begin(SDA_PIN, SCL_PIN);
   groveMp503.begin(SIGNAL_PIN);
   lcd.begin();
 
   pinMode(2, OUTPUT); // LED status WiFi
 
-  sender.begin(WIFI_SSID, WIFI_PASS);
+  sender.begin(); // HttpSender gotowy
 
   Serial.println("✅ Setup zakończony. Start pomiarów...");
 }
@@ -60,7 +61,7 @@ void loop()
 {
   unsigned long now = millis();
 
-  // 🔹 Zbieranie próbek co 0.5 s
+  // 🔹 Zbieranie próbek co 0,5 s
   if (now - lastSampleTime >= SAMPLE_INTERVAL)
   {
     lastSampleTime = now;
@@ -73,19 +74,29 @@ void loop()
     sample.humidity = envData.humidity;
     sample.pressure = envData.pressure;
     sample.voltage = airData.voltage;
-    sample.airQuality = String(airData.quality.c_str());
+    // kopiujemy string do bufora char
+    strncpy(sample.airQuality, airData.quality.c_str(), sizeof(sample.airQuality) - 1);
+    sample.airQuality[sizeof(sample.airQuality) - 1] = '\0';
 
     sender.addSample(sample); // dodanie próbki do bufora
 
-    lcd.displayData(envData.temperature, envData.humidity, envData.pressure, sample.airQuality);
+    lcd.displayData(
+        envData.temperature,
+        envData.humidity,
+        envData.pressure,
+        sample.airQuality);
 
-    Serial.printf("Temp: %.2f°C | Hum: %.2f%% | Press: %.2f hPa | Air: %s\n",
-                  envData.temperature, envData.humidity, envData.pressure, sample.airQuality.c_str());
+    Serial.printf(
+        "Temp: %.2f°C | Hum: %.2f%% | Press: %.2f hPa | Air: %s\n",
+        envData.temperature,
+        envData.humidity,
+        envData.pressure,
+        sample.airQuality);
   }
 
-  // 🔹 Wysyłka faktyczna co 5 s (w klasie HttpSender)
-  sender.update(WIFI_SSID, WIFI_PASS);
+  // 🔹 Wysyłka ostatniej próbki co 5 s
+  sender.update();
 
-  // 🔹 Dioda statusu WiFi (STA)
+  // 🔹 Dioda statusu WiFi
   digitalWrite(2, WiFi.status() == WL_CONNECTED ? HIGH : LOW);
 }
