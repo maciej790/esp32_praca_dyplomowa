@@ -24,6 +24,9 @@ Lcd lcd;
 unsigned long lastSampleTime = 0;
 const unsigned long SAMPLE_INTERVAL = 500; // co 0,5 s próbka
 
+unsigned long lastLcdUpdate = 0;
+const unsigned long LCD_INTERVAL = 5000; // 5 s odświeżanie LCD
+
 void setup()
 {
   Serial.begin(9600);
@@ -61,31 +64,41 @@ void loop()
 {
   unsigned long now = millis();
 
-  // 🔹 Zbieranie próbek co 0,5 s
+  // Odczyt próbek z czujników co 0,5 s
   if (now - lastSampleTime >= SAMPLE_INTERVAL)
   {
     lastSampleTime = now;
 
+    // Odczyt danych z BME280 i GroveMP503
     Bme280Data envData = bme280.readValues();
     GroveMP503Data airData = groveMp503.readAirQuality();
 
+    // Przygotowanie próbki do wysyłki - tworzenie struktury SensorSample
     SensorSample sample;
     sample.temperature = envData.temperature;
     sample.humidity = envData.humidity;
     sample.pressure = envData.pressure;
     sample.voltage = airData.voltage;
-    // kopiujemy string do bufora char
+
+    // Kopiowanie jakości powietrza do tablicy char
     strncpy(sample.airQuality, airData.quality.c_str(), sizeof(sample.airQuality) - 1);
     sample.airQuality[sizeof(sample.airQuality) - 1] = '\0';
 
-    sender.addSample(sample); // dodanie próbki do bufora
+    // Dodanie próbki do bufora wysyłkowego
+    sender.addSample(sample);
 
-    lcd.displayData(
-        envData.temperature,
-        envData.humidity,
-        envData.pressure,
-        sample.airQuality);
+    // Wyświetlanie na LCD co 5 sekund
+    if (now - lastLcdUpdate >= LCD_INTERVAL)
+    {
+      lastLcdUpdate = now;
+      lcd.displayData(
+          envData.temperature,
+          envData.humidity,
+          envData.pressure,
+          sample.airQuality);
+    }
 
+    // Debug na Serial Monitor
     Serial.printf(
         "Temp: %.2f°C | Hum: %.2f%% | Press: %.2f hPa | Air: %s\n",
         envData.temperature,
